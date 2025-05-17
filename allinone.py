@@ -15,14 +15,22 @@ from cache_manager import get_cached_response, cache_response, get_similar_quest
 # Constants
 CHROMA_PATH = "chroma"
 PROMPT_TEMPLATE = """
-Answer the question based only on the following context:
+You are a helpful AI assistant. Your task is to answer questions based ONLY on the provided context. 
+If the answer cannot be found in the context, say "I cannot find the answer in the provided documents."
 
+Context:
 {context}
 
----
+Question: {question}
 
-Answer the question based on the above context: {question}
-"""
+Instructions:
+1. Answer based ONLY on the provided context
+2. Be specific and detailed in your response
+3. If you're not sure, say so
+4. If the answer is not in the context, say "I cannot find the answer in the provided documents"
+5. Do not make up information
+
+Answer:"""
 
 # Helper Functions
 def process_pdf(file):
@@ -92,20 +100,20 @@ def query_rag(query_text: str, db):
         return
 
     # If not in cache, proceed with normal RAG
-    results = db.similarity_search_with_score(query_text, k=2)  # Further reduce chunks
+    results = db.similarity_search_with_score(query_text, k=4)  # Increased from 2 to 4 chunks
 
     # Create context from retrieved documents
-    context_text = " ".join([doc.page_content for doc, _score in results])
+    context_text = "\n\n".join([f"Document {i+1}:\n{doc.page_content}" for i, (doc, _score) in enumerate(results)])
     prompt_template = ChatPromptTemplate.from_template(PROMPT_TEMPLATE)
     prompt = prompt_template.format(context=context_text, question=query_text)
 
     # Use a faster model configuration with streaming
     model = ChatOllama(
         model="llama3.2:3b",  # Back to the faster 3B model
-        temperature=0.1,      # Lower temperature for faster responses
-        num_ctx=2048,         # Smaller context window
+        temperature=0.3,      # Increased slightly for better creativity while maintaining accuracy
+        num_ctx=2048,         # Context window
         num_thread=5,         # Utilize more CPU threads
-        stop=["Human:", "Assistant:"],  # Add stop tokens for faster completion
+        stop=["Human:", "Assistant:", "Question:"],  # Added more stop tokens
         streaming=True        # Enable streaming
     )
     
