@@ -15,8 +15,8 @@ from cache_manager import get_cached_response, cache_response, get_similar_quest
 # Constants
 CHROMA_PATH = "chroma"
 PROMPT_TEMPLATE = """
-You are a helpful AI assistant. Your task is to answer questions based ONLY on the provided context. 
-If the answer cannot be found in the context, say "I cannot find the answer in the provided documents."
+You are a helpful AI assistant. Your task is to answer questions based on the provided context. 
+If you cannot find a clear answer in the context, say so.
 
 Context:
 {context}
@@ -24,11 +24,10 @@ Context:
 Question: {question}
 
 Instructions:
-1. Answer based ONLY on the provided context
-2. Be specific and detailed in your response
-3. If you're not sure, say so
-4. If the answer is not in the context, say "I cannot find the answer in the provided documents"
-5. Do not make up information
+1. Answer based on the provided context
+2. Be clear and informative in your response
+3. If the answer is not in the context, say "I cannot find the answer in the provided documents"
+4. Use the context to provide a helpful response
 
 Answer:"""
 
@@ -100,20 +99,25 @@ def query_rag(query_text: str, db):
         return
 
     # If not in cache, proceed with normal RAG
-    results = db.similarity_search_with_score(query_text, k=4)  # Increased from 2 to 4 chunks
+    results = db.similarity_search_with_score(query_text, k=5)  # Balanced number of chunks
 
     # Create context from retrieved documents
-    context_text = "\n\n".join([f"Document {i+1}:\n{doc.page_content}" for i, (doc, _score) in enumerate(results)])
+    context_parts = []
+    for i, (doc, score) in enumerate(results):
+        context_parts.append(f"Document {i+1}:\n{doc.page_content}")
+    
+    context_text = "\n\n".join(context_parts)
+
     prompt_template = ChatPromptTemplate.from_template(PROMPT_TEMPLATE)
     prompt = prompt_template.format(context=context_text, question=query_text)
 
     # Use a faster model configuration with streaming
     model = ChatOllama(
         model="llama3.2:3b",  # Back to the faster 3B model
-        temperature=0.3,      # Increased slightly for better creativity while maintaining accuracy
+        temperature=0.2,      # Balanced temperature for good responses
         num_ctx=2048,         # Context window
         num_thread=5,         # Utilize more CPU threads
-        stop=["Human:", "Assistant:", "Question:"],  # Added more stop tokens
+        stop=["Human:", "Assistant:", "Question:"],  # Basic stop tokens
         streaming=True        # Enable streaming
     )
     
