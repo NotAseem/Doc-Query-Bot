@@ -1,0 +1,10 @@
+pypdf
+langchain
+chromadb # Vector storage
+pytest
+boto3
+streamlit
+langchain-chroma 
+langchain-ollama
+pypdf2
+uuid
