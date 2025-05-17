@@ -103,7 +103,7 @@ def query_rag(query_text: str, db):
     model = ChatOllama(
         model="llama3.2:3b",  # Back to the faster 3B model
         temperature=0.1,      # Lower temperature for faster responses
-        num_ctx=1024,         # Smaller context window
+        num_ctx=2048,         # Smaller context window
         num_thread=5,         # Utilize more CPU threads
         stop=["Human:", "Assistant:"],  # Add stop tokens for faster completion
         streaming=True        # Enable streaming
@@ -112,12 +112,25 @@ def query_rag(query_text: str, db):
     # Stream the response and cache it
     response_text = ""
     for chunk in model.stream(prompt):
-        if hasattr(chunk, 'content') and chunk.content:
-            response_text += chunk.content
-            yield chunk.content
+        try:
+            # Handle different response formats
+            if isinstance(chunk, dict):
+                content = chunk.get('content', '')
+            elif hasattr(chunk, 'content'):
+                content = chunk.content
+            else:
+                content = str(chunk)
+            
+            if content:
+                response_text += content
+                yield content
+        except Exception as e:
+            st.error(f"Error processing chunk: {str(e)}")
+            continue
     
     # Cache the complete response
-    cache_response(query_text, response_text)
+    if response_text:
+        cache_response(query_text, response_text)
 
 # def clear_database():
 #     """Clear the Chroma database."""
@@ -212,8 +225,11 @@ def main():
                 
                 # Stream the response
                 for chunk in query_rag(query, db):
-                    full_response += chunk
-                    response_container.markdown(full_response)
+                    if chunk:
+                        full_response += chunk
+                        # Use markdown with proper formatting and line breaks
+                        formatted_response = full_response.replace('\n', '  \n')  # Add proper markdown line breaks
+                        response_container.markdown(formatted_response, unsafe_allow_html=True)
     else:
         st.info("Upload a PDF to enable querying.")
 
