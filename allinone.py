@@ -26,8 +26,7 @@ Question: {question}
 Instructions:
 1. Answer based on the provided context
 2. Be clear and informative in your response
-3. If the answer is not in the context, say "I cannot find the answer in the provided documents"
-4. Use the context to provide a helpful response
+3. Use the context to provide a helpful response
 
 Answer:"""
 
