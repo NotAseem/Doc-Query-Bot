@@ -86,7 +86,10 @@ def query_rag(query_text: str, db):
     # Check cache first
     cached_response = get_cached_response(query_text)
     if cached_response:
-        yield cached_response
+        if isinstance(cached_response, dict):
+            yield cached_response.get('content', '')
+        else:
+            yield str(cached_response)
         return
 
     # Check for similar questions
@@ -94,7 +97,10 @@ def query_rag(query_text: str, db):
     if similar_q:
         similar_question, answer = similar_q
         st.info(f"Found similar question: '{similar_question}'")
-        yield answer
+        if isinstance(answer, dict):
+            yield answer.get('content', '')
+        else:
+            yield str(answer)
         return
 
     # If not in cache, proceed with normal RAG
@@ -103,7 +109,11 @@ def query_rag(query_text: str, db):
     # Create context from retrieved documents
     context_parts = []
     for i, (doc, score) in enumerate(results):
-        context_parts.append(f"Document {i+1}:\n{doc.page_content}")
+        if hasattr(doc, 'page_content'):
+            content = doc.page_content
+        else:
+            content = str(doc)
+        context_parts.append(f"Document {i+1}:\n{content}")
     
     context_text = "\n\n".join(context_parts)
 
@@ -122,26 +132,29 @@ def query_rag(query_text: str, db):
     
     # Stream the response and cache it
     response_text = ""
-    for chunk in model.stream(prompt):
-        try:
-            # Handle different response formats
-            if isinstance(chunk, dict):
-                content = chunk.get('content', '')
-            elif hasattr(chunk, 'content'):
-                content = chunk.content
-            else:
-                content = str(chunk)
-            
-            if content:
-                response_text += content
-                yield content
-        except Exception as e:
-            st.error(f"Error processing chunk: {str(e)}")
-            continue
-    
-    # Cache the complete response
-    if response_text:
-        cache_response(query_text, response_text)
+    try:
+        for chunk in model.stream(prompt):
+            try:
+                if isinstance(chunk, dict):
+                    content = chunk.get('content', '')
+                elif hasattr(chunk, 'content'):
+                    content = chunk.content
+                else:
+                    content = str(chunk)
+                
+                if content:
+                    response_text += content
+                    yield content
+            except Exception as e:
+                st.error(f"Error processing chunk: {str(e)}")
+                continue
+        
+        # Cache the complete response
+        if response_text:
+            cache_response(query_text, response_text)
+    except Exception as e:
+        st.error(f"Error in response generation: {str(e)}")
+        yield f"Error generating response: {str(e)}"
 
 # def clear_database():
 #     """Clear the Chroma database."""
@@ -236,11 +249,23 @@ def main():
                 
                 # Stream the response
                 for chunk in query_rag(query, db):
-                    if chunk:
-                        full_response += chunk
-                        # Use markdown with proper formatting and line breaks
-                        formatted_response = full_response.replace('\n', '  \n')  # Add proper markdown line breaks
-                        response_container.markdown(formatted_response, unsafe_allow_html=True)
+                    try:
+                        # Handle different response formats
+                        if isinstance(chunk, dict):
+                            content = chunk.get('content', '')
+                        elif hasattr(chunk, 'content'):
+                            content = chunk.content
+                        else:
+                            content = str(chunk)
+                        
+                        if content:
+                            full_response += content
+                            # Format the response for display
+                            formatted_response = full_response.replace('\n', '  \n')  # Add proper markdown line breaks
+                            response_container.markdown(formatted_response, unsafe_allow_html=True)
+                    except Exception as e:
+                        st.error(f"Error processing response chunk: {str(e)}")
+                        continue
     else:
         st.info("Upload a PDF to enable querying.")
 
