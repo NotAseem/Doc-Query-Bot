@@ -86,21 +86,27 @@ def query_rag(query_text: str, db):
     # Check cache first
     cached_response = get_cached_response(query_text)
     if cached_response:
+        # The cache stores answers in a dict with 'answer' key
         if isinstance(cached_response, dict):
-            yield cached_response.get('content', '')
+            content = cached_response.get('answer', '')
         else:
-            yield str(cached_response)
+            content = str(cached_response)
+        
+        # Yield the content character by character to simulate streaming
+        for char in content:
+            yield char
         return
 
     # Check for similar questions
     similar_q = get_similar_question(query_text)
     if similar_q:
         similar_question, answer = similar_q
-        st.info(f"Found similar question: '{similar_question}'")
-        if isinstance(answer, dict):
-            yield answer.get('content', '')
-        else:
-            yield str(answer)
+        # Similar questions return the answer directly
+        content = str(answer)
+        
+        # Yield the content character by character to simulate streaming
+        for char in content:
+            yield char
         return
 
     # If not in cache, proceed with normal RAG
