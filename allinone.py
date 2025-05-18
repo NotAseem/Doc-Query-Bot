@@ -162,27 +162,6 @@ def query_rag(query_text: str, db):
         st.error(f"Error in response generation: {str(e)}")
         yield f"Error generating response: {str(e)}"
 
-def clear_chroma_db(db):
-    """Clear the Chroma database using its built-in methods."""
-    try:
-        # Get all collections
-        collections = db.get()
-        if collections and collections.get('ids'):
-            # Delete all documents
-            db.delete(ids=collections['ids'])
-            # Delete the collection
-            db.delete_collection()
-            # Recreate the database
-            db = Chroma(
-                persist_directory=CHROMA_PATH,
-                embedding_function=get_embedding_function()
-            )
-            return True, "Database cleared successfully!"
-        else:
-            return False, "Database is already empty."
-    except Exception as e:
-        return False, f"Error clearing database: {str(e)}"
-
 def clear_qa_cache():
     """Clear the QA cache contents."""
     clear_cache()
@@ -200,31 +179,18 @@ def main():
         embedding_function=get_embedding_function()
     )
 
-    if args.reset:
-        success, message = clear_chroma_db(db)
-        if success:
-            db = clear_chroma_db(db)[1]
+
 
     # Streamlit UI
     st.title("PDF Querying with RAG System")
 
-    # Add cache and database clearing buttons side by side
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if st.button("Clear Response Cache"):
-            message = clear_qa_cache()
-            st.success(message)
+    try:
+        existing_items = db.get(include=[])
+        has_documents = len(existing_items["ids"]) > 0
+    except ValueError:
+        # If collection is not initialized, treat as empty
+        has_documents = False
 
-    with col2:
-        if st.button("Clear Chroma Database"):
-            success, message = clear_chroma_db(db)
-            if success:
-                db = clear_chroma_db(db)[1]
-            st.info(message)
-
-    existing_items = db.get(include=[])
-    has_documents = len(existing_items["ids"]) > 0
     # Upload PDF
     uploaded_file = st.file_uploader("Upload a PDF file", type="pdf")
     if uploaded_file is not None:
@@ -279,7 +245,7 @@ def main():
         st.subheader("🔍 Ask a Question")
         query = st.text_input("Enter your query:")
         if query:
-            with st.spinner("🔍 Searching through documents..."):
+            with st.spinner(""):
                 # Create an empty container for the response
                 response_container = st.empty()
                 full_response = ""
