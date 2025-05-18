@@ -84,4 +84,9 @@ def get_cache_stats() -> dict:
         "average_answer_length": sum(len(data.get("answer", "")) for data in cache.values()) / len(cache) if cache else 0,
         "oldest_entry": min((data.get("timestamp", "") for data in cache.values()), default=""),
         "newest_entry": max((data.get("timestamp", "") for data in cache.values()), default="")
-    } 
+    }
+
+def clear_cache():
+    """Clear all contents of the cache."""
+    with open(CACHE_FILE, 'w', encoding='utf-8') as f:
+        json.dump({}, f, indent=2, ensure_ascii=False) 

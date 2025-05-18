@@ -10,7 +10,7 @@ import os
 import shutil
 import argparse
 import uuid
-from cache_manager import get_cached_response, cache_response, get_similar_question
+from cache_manager import get_cached_response, cache_response, get_similar_question, clear_cache
 
 # Constants
 CHROMA_PATH = "chroma"
@@ -27,7 +27,7 @@ Instructions:
 1. Answer based on the provided context
 2. Be clear and informative in your response
 3. Use the context to provide a helpful response
-
+4. Don't mention document numbers in response
 Answer:"""
 
 # Helper Functions
@@ -162,11 +162,31 @@ def query_rag(query_text: str, db):
         st.error(f"Error in response generation: {str(e)}")
         yield f"Error generating response: {str(e)}"
 
-# def clear_database():
-#     """Clear the Chroma database."""
-#     if os.path.exists(CHROMA_PATH):
-#         shutil.rmtree(CHROMA_PATH)
-#         st.write("Database cleared.")
+def clear_chroma_db(db):
+    """Clear the Chroma database using its built-in methods."""
+    try:
+        # Get all collections
+        collections = db.get()
+        if collections and collections.get('ids'):
+            # Delete all documents
+            db.delete(ids=collections['ids'])
+            # Delete the collection
+            db.delete_collection()
+            # Recreate the database
+            db = Chroma(
+                persist_directory=CHROMA_PATH,
+                embedding_function=get_embedding_function()
+            )
+            return True, "Database cleared successfully!"
+        else:
+            return False, "Database is already empty."
+    except Exception as e:
+        return False, f"Error clearing database: {str(e)}"
+
+def clear_qa_cache():
+    """Clear the QA cache contents."""
+    clear_cache()
+    return "Cache cleared successfully!"
 
 # Streamlit Interface
 def main():
@@ -181,16 +201,27 @@ def main():
     )
 
     if args.reset:
-        # clear_database()
-        pass
+        success, message = clear_chroma_db(db)
+        if success:
+            db = clear_chroma_db(db)[1]
 
     # Streamlit UI
-
     st.title("PDF Querying with RAG System")
 
-    # Clear Database Option
-    # if st.button("Clear Database"):
-    #     clear_database()
+    # Add cache and database clearing buttons side by side
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("Clear Response Cache"):
+            message = clear_qa_cache()
+            st.success(message)
+
+    with col2:
+        if st.button("Clear Chroma Database"):
+            success, message = clear_chroma_db(db)
+            if success:
+                db = clear_chroma_db(db)[1]
+            st.info(message)
 
     existing_items = db.get(include=[])
     has_documents = len(existing_items["ids"]) > 0
@@ -225,7 +256,7 @@ def main():
         #     st.write(sources)
     if has_documents or uploaded_file is not None:
         st.subheader("📂 Files in Database")
-    
+        
         # --- Show existing documents ---
         try:
             # Get all documents and their metadata
