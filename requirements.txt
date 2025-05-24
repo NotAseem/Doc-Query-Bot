@@ -5,6 +5,6 @@ pytest
 boto3
 streamlit
 langchain-chroma 
-langchain-ollama
+langchain-google-genai
 pypdf2
 uuid

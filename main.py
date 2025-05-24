@@ -1,7 +1,7 @@
 import streamlit as st
 from langchain_chroma import Chroma
 from langchain.prompts import ChatPromptTemplate
-from langchain_ollama import ChatOllama
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain.schema.document import Document
 from get_embedding_function import get_embedding_function
@@ -9,8 +9,20 @@ from PyPDF2 import PdfReader
 import os
 import shutil
 import argparse
+import google.generativeai as genai
 import uuid
 from cache_manager import get_cached_response, cache_response, get_similar_question, clear_cache
+from dotenv import load_dotenv
+load_dotenv()
+
+# Initialize Gemini
+api_key = os.getenv("GOOGLE_API_KEY")
+if not api_key:
+    st.error("Please set GOOGLE_API_KEY in your .env file")
+    st.stop()
+    
+genai.configure(api_key=api_key)
+model = genai.GenerativeModel('gemini-2.0-flash')
 
 # Constants
 CHROMA_PATH = "chroma"
@@ -86,81 +98,40 @@ def query_rag(query_text: str, db):
     # Check cache first
     cached_response = get_cached_response(query_text)
     if cached_response:
-        # The cache stores answers in a dict with 'answer' key
-        if isinstance(cached_response, dict):
-            content = cached_response.get('answer', '')
-        else:
-            content = str(cached_response)
-        
-        # Yield the content character by character to simulate streaming
+        content = cached_response.get('answer', str(cached_response))
         for char in content:
             yield char
         return
 
-    # Check for similar questions
     similar_q = get_similar_question(query_text)
     if similar_q:
-        similar_question, answer = similar_q
-        # Similar questions return the answer directly
-        content = str(answer)
-        
-        # Yield the content character by character to simulate streaming
-        for char in content:
+        _, answer = similar_q
+        for char in str(answer):
             yield char
         return
 
-    # If not in cache, proceed with normal RAG
-    results = db.similarity_search_with_score(query_text, k=5)  # Balanced number of chunks
-
-    # Create context from retrieved documents
-    context_parts = []
-    for i, (doc, score) in enumerate(results):
-        if hasattr(doc, 'page_content'):
-            content = doc.page_content
-        else:
-            content = str(doc)
-        context_parts.append(f"Document {i+1}:\n{content}")
-    
+    results = db.similarity_search_with_score(query_text, k=5)
+    context_parts = [doc.page_content for doc, _ in results]
     context_text = "\n\n".join(context_parts)
 
-    prompt_template = ChatPromptTemplate.from_template(PROMPT_TEMPLATE)
-    prompt = prompt_template.format(context=context_text, question=query_text)
+    system_prompt = "You are a helpful AI assistant. Answer based only on the provided context."
+    user_prompt = f"""Context:\n{context_text}\n\nQuestion: {query_text}\n\nAnswer:"""
 
-    # Use a faster model configuration with streaming
-    model = ChatOllama(
-        model="llama3.2:3b",  # Back to the faster 3B model
-        temperature=0.2,      # Balanced temperature for good responses
-        num_ctx=2048,         # Context window
-        num_thread=5,         # Utilize more CPU threads
-        stop=["Human:", "Assistant:", "Question:"],  # Basic stop tokens
-        streaming=True        # Enable streaming
-    )
-    
-    # Stream the response and cache it
-    response_text = ""
     try:
-        for chunk in model.stream(prompt):
-            try:
-                if isinstance(chunk, dict):
-                    content = chunk.get('content', '')
-                elif hasattr(chunk, 'content'):
-                    content = chunk.content
-                else:
-                    content = str(chunk)
-                
-                if content:
-                    response_text += content
-                    yield content
-            except Exception as e:
-                st.error(f"Error processing chunk: {str(e)}")
-                continue
+        response_text = ""
+        response = model.generate_content(user_prompt, stream=True)
         
-        # Cache the complete response
+        for chunk in response:
+            if chunk.text:
+                response_text += chunk.text
+                yield chunk.text
+
         if response_text:
             cache_response(query_text, response_text)
+
     except Exception as e:
-        st.error(f"Error in response generation: {str(e)}")
-        yield f"Error generating response: {str(e)}"
+        st.error(f"Error generating response: {str(e)}")
+        yield f"Error: {str(e)}"
 
 def clear_qa_cache():
     """Clear the QA cache contents."""

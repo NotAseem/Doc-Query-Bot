@@ -5,7 +5,7 @@ from datetime import datetime
 
 CACHE_FILE = "qa_cache.json"
 MAX_CACHE_SIZE = 1000  # Maximum number of cached questions
-MIN_SIMILARITY_THRESHOLD = 0.85  # Increased threshold for more strict matching
+MIN_SIMILARITY_THRESHOLD = 0.99  # Increased threshold for more strict matching
 
 def load_cache() -> dict:
     """Load the cache from file if it exists, otherwise return empty dict."""
