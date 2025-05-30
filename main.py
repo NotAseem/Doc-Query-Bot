@@ -54,8 +54,8 @@ def process_pdf(file):
 def split_text_into_chunks(text):
     """Splits extracted text into smaller chunks."""
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=800,
-        chunk_overlap=80,
+        chunk_size=1000,
+        chunk_overlap=200,
         length_function=len,
         is_separator_regex=False,
     )
@@ -78,7 +78,6 @@ def add_to_chroma(chunks, filename):
     # Get existing document IDs
     existing_items = db.get(include=[])
     existing_ids = set(existing_items["ids"])
-    st.write(f"Number of existing documents in DB: {len(existing_ids)}")
 
     # Add only new documents
     new_chunks = [
@@ -86,11 +85,8 @@ def add_to_chroma(chunks, filename):
     ]
 
     if new_chunks:
-        st.write(f"Adding {len(new_chunks)} new document(s) to the database.")
         new_chunk_ids = [chunk.metadata["id"] for chunk in new_chunks]
         db.add_documents(new_chunks, ids=new_chunk_ids)
-    else:
-        st.write("No new documents to add.")
     return db
 
 def query_rag(query_text: str, db):
@@ -110,7 +106,7 @@ def query_rag(query_text: str, db):
             yield char
         return
 
-    results = db.similarity_search_with_score(query_text, k=5)
+    results = db.similarity_search_with_score(query_text, k=10)
     context_parts = [doc.page_content for doc, _ in results]
     context_text = "\n\n".join(context_parts)
 
@@ -163,21 +159,14 @@ def main():
         has_documents = False
 
     # Upload PDF
-    uploaded_file = st.file_uploader("Upload a PDF file", type="pdf")
-    if uploaded_file is not None:
-        st.write("Processing PDF...")
-        pdf_text, filename = process_pdf(uploaded_file)
-        st.success(f"PDF '{filename}' uploaded and processed!")
-
-        # Split text into chunks
-        st.write("Splitting text into chunks...")
-        chunks = split_text_into_chunks(pdf_text)
-        st.success(f"Split into {len(chunks)} chunks!")
-
-        # Set up the Chroma database
-        st.write("Setting up the database...")
-        db = add_to_chroma(chunks, filename)
-        st.success("Database populated successfully!")
+    uploaded_files = st.file_uploader("Upload PDF files", type="pdf", accept_multiple_files=True)
+    if uploaded_files:
+        with st.spinner(f"Processing {len(uploaded_files)} file(s)..."):
+            for uploaded_file in uploaded_files:
+                pdf_text, filename = process_pdf(uploaded_file)
+                chunks = split_text_into_chunks(pdf_text)
+                db = add_to_chroma(chunks, filename)
+        st.success(f"Successfully processed {len(uploaded_files)} file(s)!")
 
         # Query Input
         #query = st.text_input("Enter your query:")
@@ -191,27 +180,37 @@ def main():
 
         #     st.write("### Sources")
         #     st.write(sources)
-    if has_documents or uploaded_file is not None:
-        st.subheader("📂 Files in Database")
-        
-        # --- Show existing documents ---
-        try:
-            # Get all documents and their metadata
-            all_docs = db.get()
-            if all_docs and all_docs['metadatas']:
-                # Create a set of unique filenames from the source metadata
-                unique_files = set()
-                for metadata in all_docs['metadatas']:
-                    if 'source' in metadata:
-                        unique_files.add(metadata['source'])
-                
-                # Display each unique filename
-                for filename in unique_files:
-                    st.markdown(f"- 📄 `{filename}`")
-            else:
-                st.info("No files found in the database.")
-        except Exception as e:
-            st.error(f"Error fetching files: {e}")
+    if has_documents or uploaded_files is not None:
+        # Initialize session state for toggle if not exists
+        if 'show_docs' not in st.session_state:
+            st.session_state.show_docs = False
+
+        # Toggle button
+        if st.button("📂 View Documents in Database"):
+            st.session_state.show_docs = not st.session_state.show_docs
+
+        # Show documents only if toggle is on
+        if st.session_state.show_docs:
+            st.subheader("📂 Files in Database")
+            
+            # --- Show existing documents ---
+            try:
+                # Get all documents and their metadata
+                all_docs = db.get()
+                if all_docs and all_docs['metadatas']:
+                    # Create a set of unique filenames from the source metadata
+                    unique_files = set()
+                    for metadata in all_docs['metadatas']:
+                        if 'source' in metadata:
+                            unique_files.add(metadata['source'])
+                    
+                    # Display each unique filename
+                    for filename in unique_files:
+                        st.markdown(f"- 📄 `{filename}`")
+                else:
+                    st.info("No files found in the database.")
+            except Exception as e:
+                st.error(f"Error fetching files: {e}")
 
         st.subheader("🔍 Ask a Question")
         query = st.text_input("Enter your query:")

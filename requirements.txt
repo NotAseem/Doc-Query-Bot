@@ -4,7 +4,8 @@ chromadb # Vector storage
 pytest
 boto3
 streamlit
-langchain-chroma 
+langchain-chroma
 langchain-google-genai
 pypdf2
 uuid
+google-generativeai
